@@ -15,7 +15,7 @@ DHT::DHT(uint8_t pin, uint8_t type, uint8_t count) {
     _bit = digitalPinToBitMask(pin);
     _port = digitalPinToPort(pin);
   #endif
-  _maxcycles = microsecondsToClockCycles(1000);  // 1 millisecond timeout for
+  _maxcycles = (uint16_t) microsecondsToClockCycles(1000);  // 1 millisecond timeout for
                                                  // reading pulses from DHT sensor.
   // Note that count is now ignored as the DHT reading algorithm adjusts itself
   // basd on the speed of the processor.
@@ -45,6 +45,11 @@ float DHT::readTemperature(bool S, bool force) {
       break;
     case DHT22:
     case DHT21:
+#if 1
+      int16_t val = (int8_t) data[2];
+      val = (val << 8) | data[3];
+      f = val * 0.1f;
+#else
       f = data[2] & 0x7F;
       f *= 256;
       f += data[3];
@@ -52,6 +57,7 @@ float DHT::readTemperature(bool S, bool force) {
       if (data[2] & 0x80) {
         f *= -1;
       }
+#endif
       if(S) {
         f = convertCtoF(f);
       }
@@ -71,17 +77,23 @@ float DHT::convertFtoC(float f) {
 
 float DHT::readHumidity(bool force) {
   float f = NAN;
-  if (read()) {
+  if (read(force)) {
     switch (_type) {
     case DHT11:
       f = data[0];
       break;
     case DHT22:
     case DHT21:
+#if 1
+      uint16_t val = data[0];
+      val = (val << 8) | data[1];
+      f = val * 0.1f;
+#else
       f = data[0];
       f *= 256;
       f += data[1];
       f *= 0.1;
+#endif
       break;
     }
   }
@@ -137,15 +149,17 @@ boolean DHT::read(bool force) {
 
   // Go into high impedence state to let pull-up raise data line level and
   // start the reading process.
+#if 0
   digitalWrite(_pin, HIGH);
   delay(250);
+#endif
 
   // First set data line low for 20 milliseconds.
   pinMode(_pin, OUTPUT);
   digitalWrite(_pin, LOW);
   delay(20);
 
-  uint32_t cycles[80];
+  uint16_t cycles[80];
   {
     // Turn off interrupts temporarily because the next sections are timing critical
     // and we don't want any interruptions.
@@ -186,11 +200,19 @@ boolean DHT::read(bool force) {
     }
   } // Timing critical code is now complete.
 
+  // Determine the average low pulse width over the first 8 bits to use as a reference
+  // to determine 0 or 1.
+  uint16_t meanLowCycles = 0;
+  for (int i=0; i<8; ++i) {
+    meanLowCycles += cycles[2*i];
+  }
+  meanLowCycles /= 8;
+  DEBUG_PRINT(F("meanLowCycles ")); DEBUG_PRINTLN(meanLowCycles);
   // Inspect pulses and determine which ones are 0 (high state cycle count < low
   // state cycle count), or 1 (high state cycle count > low state cycle count).
   for (int i=0; i<40; ++i) {
-    uint32_t lowCycles  = cycles[2*i];
-    uint32_t highCycles = cycles[2*i+1];
+    uint16_t lowCycles  = cycles[2*i];
+    uint16_t highCycles = cycles[2*i+1];
     if ((lowCycles == 0) || (highCycles == 0)) {
       DEBUG_PRINTLN(F("Timeout waiting for pulse."));
       _lastresult = false;
@@ -198,7 +220,7 @@ boolean DHT::read(bool force) {
     }
     data[i/8] <<= 1;
     // Now compare the low and high cycle times to see if the bit is a 0 or 1.
-    if (highCycles > lowCycles) {
+    if (highCycles > meanLowCycles) {
       // High cycles are greater than 50us low cycle count, must be a 1.
       data[i/8] |= 1;
     }
@@ -207,16 +229,18 @@ boolean DHT::read(bool force) {
     // stored data.
   }
 
+  uint8_t checksum = (data[0] + data[1] + data[2] + data[3]);
+
   DEBUG_PRINTLN(F("Received:"));
   DEBUG_PRINT(data[0], HEX); DEBUG_PRINT(F(", "));
   DEBUG_PRINT(data[1], HEX); DEBUG_PRINT(F(", "));
   DEBUG_PRINT(data[2], HEX); DEBUG_PRINT(F(", "));
   DEBUG_PRINT(data[3], HEX); DEBUG_PRINT(F(", "));
   DEBUG_PRINT(data[4], HEX); DEBUG_PRINT(F(" =? "));
-  DEBUG_PRINTLN((data[0] + data[1] + data[2] + data[3]) & 0xFF, HEX);
+  DEBUG_PRINTLN(checksum, HEX);
 
   // Check we read 40 bits and that the checksum matches.
-  if (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {
+  if (data[4] == checksum) {
     _lastresult = true;
     return _lastresult;
   }
@@ -234,8 +258,8 @@ boolean DHT::read(bool force) {
 // This is adapted from Arduino's pulseInLong function (which is only available
 // in the very latest IDE versions):
 //   https://github.com/arduino/Arduino/blob/master/hardware/arduino/avr/cores/arduino/wiring_pulse.c
-uint32_t DHT::expectPulse(bool level) {
-  uint32_t count = 0;
+uint16_t DHT::expectPulse(bool level) {
+  uint16_t count = 0;
   // On AVR platforms use direct GPIO port access as it's much faster and better
   // for catching pulses that are 10's of microseconds in length:
   #ifdef __AVR
