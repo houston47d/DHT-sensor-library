@@ -46,8 +46,10 @@ float DHT::readTemperature(bool S, bool force) {
     case DHT22:
     case DHT21:
 #if 1
-      int16_t val = (int8_t) data[2];
-      val = (val << 8) | data[3];
+      // Note it is _not_ two's complement...
+      int16_t val = (int8_t) (data[2] & 0x7f);
+      val = val * 256 + data[3];
+      if (data[2] & 0x80) val = -val;
       f = val * 0.1f;
 #else
       f = data[2] & 0x7F;
@@ -86,7 +88,7 @@ float DHT::readHumidity(bool force) {
     case DHT21:
 #if 1
       uint16_t val = data[0];
-      val = (val << 8) | data[1];
+      val = val * 256 + data[1];
       f = val * 0.1f;
 #else
       f = data[0];
