@@ -15,7 +15,7 @@ DHT::DHT(uint8_t pin, uint8_t type, uint8_t count) {
     _bit = digitalPinToBitMask(pin);
     _port = digitalPinToPort(pin);
   #endif
-  _maxcycles = (uint16_t) microsecondsToClockCycles(1000);  // 1 millisecond timeout for
+  _maxcycles = (unsigned) microsecondsToClockCycles(1000);  // 1 millisecond timeout for
                                                  // reading pulses from DHT sensor.
   // Note that count is now ignored as the DHT reading algorithm adjusts itself
   // basd on the speed of the processor.
@@ -161,7 +161,7 @@ boolean DHT::read(bool force) {
   digitalWrite(_pin, LOW);
   delay(20);
 
-  uint16_t cycles[80];
+  unsigned cycles[80];
   {
     // Turn off interrupts temporarily because the next sections are timing critical
     // and we don't want any interruptions.
@@ -204,7 +204,7 @@ boolean DHT::read(bool force) {
 
   // Determine the average low pulse width over the first 8 bits to use as a reference
   // to determine 0 or 1.
-  uint16_t meanLowCycles = 0;
+  unsigned meanLowCycles = 0;
   for (int i=0; i<8; ++i) {
     meanLowCycles += cycles[2*i];
   }
@@ -213,8 +213,8 @@ boolean DHT::read(bool force) {
   // Inspect pulses and determine which ones are 0 (high state cycle count < low
   // state cycle count), or 1 (high state cycle count > low state cycle count).
   for (int i=0; i<40; ++i) {
-    uint16_t lowCycles  = cycles[2*i];
-    uint16_t highCycles = cycles[2*i+1];
+    unsigned lowCycles  = cycles[2*i];
+    unsigned highCycles = cycles[2*i+1];
     if ((lowCycles == 0) || (highCycles == 0)) {
       DEBUG_PRINTLN(F("Timeout waiting for pulse."));
       _lastresult = false;
@@ -260,8 +260,8 @@ boolean DHT::read(bool force) {
 // This is adapted from Arduino's pulseInLong function (which is only available
 // in the very latest IDE versions):
 //   https://github.com/arduino/Arduino/blob/master/hardware/arduino/avr/cores/arduino/wiring_pulse.c
-uint16_t DHT::expectPulse(bool level) {
-  uint16_t count = 0;
+unsigned DHT::expectPulse(bool level) {
+  unsigned count = 0;
   // On AVR platforms use direct GPIO port access as it's much faster and better
   // for catching pulses that are 10's of microseconds in length:
   #ifdef __AVR

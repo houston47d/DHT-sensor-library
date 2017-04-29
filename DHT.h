@@ -55,10 +55,12 @@ class DHT {
     uint8_t _bit, _port;
   #endif
   uint32_t _lastreadtime;
-  uint16_t _maxcycles;
+  // The use of the generic 'unsigned' (vs. uint16_t or the like) is that it naturally
+  // gets bigger on faster processors. For the ATmega, it is 16-bits which is perfect.
+  unsigned _maxcycles;
   bool _lastresult;
 
-  uint16_t expectPulse(bool level);
+  unsigned expectPulse(bool level);
 
 };
 
